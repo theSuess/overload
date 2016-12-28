@@ -54,9 +54,9 @@ func (s *Server) Run() {
 	})
 
 	s.canEnque = make(chan string, s.ConcurrentDownloads)
-	for i := 0; i < s.ConcurrentDownloads-1; i++ { // Initialize the channel with empty finished downloads
-		s.canEnque <- ""
-	}
+	//for i := 0; i < s.ConcurrentDownloads-1; i++ { // Initialize the channel with empty finished downloads
+//		s.canEnque <- ""
+//	}
 	s.workerQueue = make(chan string, s.MaxWorkers)
 	go func() {
 		for {

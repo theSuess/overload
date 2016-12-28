@@ -1,0 +1,4 @@
+interface = ':8000'
+maxworkers = 1024
+concurrentdownloads = 3
+downloaddir = '/tmp/downloads'

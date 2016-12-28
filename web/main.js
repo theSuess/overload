@@ -39,7 +39,7 @@ var workerlist = new Vue({
                         this.workers.forEach((w) => {
                             w.ws.close();
                         });
-                        refreshWorkers();
+                        window.setTimeout(refreshWorkers, 1000); // Use a seperate websocket for this
                     }
                 });
                 console.log(this.url);

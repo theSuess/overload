@@ -3,19 +3,34 @@ package main
 import (
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 
+	"github.com/BurntSushi/toml"
 	"github.com/yhat/scrape"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
 
+type Configuration struct {
+	Interface           string
+	DownloadDir         string
+	ConcurrentDownloads int
+	MaxWorkers          int
+}
+
 func main() {
+	confLocation := "overload.toml"
+	if len(os.Args) > 1 {
+		confLocation = os.Args[2]
+	}
+	var c Configuration
+	toml.DecodeFile(confLocation, &c)
 	s := Server{
-		Interface:           ":8000",
-		DownloadDir:         "/tmp/downloads",
-		ConcurrentDownloads: 3,
-		MaxWorkers:          1024,
+		Interface:           c.Interface,
+		DownloadDir:         c.DownloadDir,
+		ConcurrentDownloads: c.ConcurrentDownloads,
+		MaxWorkers:          c.MaxWorkers,
 	}
 	s.Run()
 }
