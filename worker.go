@@ -19,6 +19,7 @@ type PassThru struct {
 	length int64
 	total  int64 // Total # of bytes transferred
 	stop   chan bool
+	subs   map[int64]chan Status
 }
 
 // Read 'overrides' the underlying io.Reader's Read method.
@@ -33,6 +34,9 @@ func (pt *PassThru) Read(p []byte) (int, error) {
 	}
 	n, err := pt.Reader.Read(p)
 	pt.total += int64(n)
+	for _, c := range pt.subs {
+		c <- Status{Total: pt.total, Length: pt.length}
+	}
 	return n, err
 }
 
@@ -80,7 +84,7 @@ func (w *Worker) Download(done chan string) error {
 		return err
 	}
 	defer response.Body.Close()
-	w.pt = &PassThru{Reader: response.Body, length: response.ContentLength, stop: w.stop}
+	w.pt = &PassThru{Reader: response.Body, length: response.ContentLength, stop: w.stop, subs: make(map[int64]chan Status)}
 	io.Copy(file, w.pt)
 	done <- w.Filename
 	return nil
@@ -92,6 +96,20 @@ func (w *Worker) Status() Status {
 	} else {
 		return Status{Length: 0, Total: 0}
 	}
+}
+
+func (w *Worker) IsActive() bool {
+	return w.pt != nil
+}
+
+func (w *Worker) AddListener(lid int64) chan Status {
+	c := make(chan Status, 1024)
+	w.pt.subs[lid] = c
+	return c
+}
+
+func (w *Worker) RemoveListener(lid int64) {
+	delete(w.pt.subs, lid)
 }
 
 func (w *Worker) Stop() {

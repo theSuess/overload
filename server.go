@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/labstack/gommon/log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -10,7 +9,9 @@ import (
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/labstack/gommon/log"
 	"github.com/speps/go-hashids"
+	"golang.org/x/net/websocket"
 )
 
 type Server struct {
@@ -40,10 +41,17 @@ func (s *Server) Run() {
 
 	s.workers = make(map[string]*Worker)
 
-	// Route => handler
-	e.POST("/tasks", s.AddTask)
-	e.GET("/workers", s.GetWorkers)
-	e.DELETE("/workers/:id", s.StopWorker)
+	g := e.Group("/api")
+	g.POST("/tasks", s.AddTask)
+	g.GET("/workers", s.GetWorkers)
+	g.DELETE("/workers/:id", s.StopWorker)
+	g.GET("/workers/:id/active", s.GetActive)
+	g.GET("/workers/:id/ws", s.StreamStatus)
+
+	e.Static("/web", "web")
+	e.GET("/", func(c echo.Context) error {
+		return c.Redirect(http.StatusTemporaryRedirect, "/web")
+	})
 
 	s.canEnque = make(chan string, s.ConcurrentDownloads)
 	for i := 0; i < s.ConcurrentDownloads-1; i++ { // Initialize the channel with empty finished downloads
@@ -74,6 +82,7 @@ func (s *Server) AddTask(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 	defer req.Body.Close()
+
 	var accept *regexp.Regexp
 	if t.Accept == "" {
 		t.Accept = ".*"
@@ -86,6 +95,10 @@ func (s *Server) AddTask(c echo.Context) error {
 	u, err := url.Parse(t.Url)
 	if err != nil {
 		return c.NoContent(http.StatusBadRequest)
+	}
+
+	if t.Location == "" {
+		t.Location = s.DownloadDir
 	}
 
 	urls, err := getURLs(u, accept)
@@ -108,12 +121,12 @@ func (s *Server) AddTask(c echo.Context) error {
 }
 
 func (s *Server) GetWorkers(c echo.Context) error {
-	var workers []struct {
+	workers := []struct {
 		Id       string
 		Url      string
 		Filename string
 		Status   Status
-	}
+	}{}
 	for id, w := range s.workers {
 		workers = append(workers, struct {
 			Id       string
@@ -132,6 +145,44 @@ func (s *Server) StopWorker(c echo.Context) error {
 	}
 	worker.Stop()
 	return c.NoContent(http.StatusOK)
+}
+
+func (s *Server) GetActive(c echo.Context) error {
+	worker := s.workers[c.Param("id")]
+	if worker.IsActive() {
+		return c.NoContent(http.StatusOK)
+	} else {
+		return c.NoContent(http.StatusNotAcceptable)
+	}
+}
+
+func (s *Server) StreamStatus(c echo.Context) error {
+	worker := s.workers[c.Param("id")]
+	if worker == nil {
+		return c.NoContent(http.StatusNotFound)
+	}
+	if !worker.IsActive() {
+		return c.NoContent(http.StatusNotFound)
+	}
+	lid := time.Now().UnixNano()
+	sub := worker.AddListener(lid)
+	websocket.Handler(func(ws *websocket.Conn) {
+		defer ws.Close()
+		defer worker.RemoveListener(lid)
+		for {
+			status := <-sub
+			b, err := json.Marshal(status)
+			if err != nil {
+				c.Logger().Error(err)
+			}
+			// Write
+			err = websocket.Message.Send(ws, string(b))
+			if err != nil {
+				break
+			}
+		}
+	}).ServeHTTP(c.Response(), c.Request())
+	return nil
 }
 
 func (s *Server) GetID() string {

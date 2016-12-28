@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Overload</title>
+    <link href="https://necolas.github.io/normalize.css/5.0.0/normalize.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.2.3/css/bulma.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css">
+    <link rel="stylesheet" href="/web/overload.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="box" id="app">
+            <h1 class="title">Overload</h1>
+            <form @submit.prevent="addDownload" class="column is-12">
+                <h4 class="title is-4">Add Directory</h4>
+                <label class="label" for="url">URL</label>
+                <p :class="{ 'control': true }">
+                    <input v-validate data-vv-rules="required|url" :class="{'input': true, 'is-danger': errors.has('url') }" name="url" type="text" placeholder="URL" v-model="url">
+                    <span v-show="errors.has('url')" class="help is-danger">{{ errors.first('url') }}</span>
+                </p>
+                <label class="label" for="accept">Accept</label>
+                <p class="control">
+                    <input name="accept" type="text" placeholder=".*" class="input" v-model="accept">
+                </p>
+                <label class="label" for="location">Location</label>
+                <p class="control">
+                    <input name="location" type="text" placeholder="/tmp/Downloads" class="input" v-model="location">
+                </p>
+                <p class="control">
+                    <button type="submit" class="button is-primary" name="button">Download</button>
+                </p>
+            </form>
+            <div>
+                <worker-item v-for="worker in workers" :worker="worker"></worker-item>
+            </div>
+        </div>
+    </div>
+    <script type="text/x-template" id="worker-progress">
+        <progress class="progress" :class="[status.Total == status.Length ? 'is-success' : 'is-primary']" :value="status.Total" :max="status.Length"></progress>
+    </script>
+    <script type="text/x-template" id="worker-item">
+        <div class="box">
+            <h4 class="title is-4"> {{worker.Filename}} </h4>
+            <h6 class="title is-6"> {{worker.Id}} </h6>
+            <worker-progress :status="worker.Status"></worker-progress>
+        </div>
+    </script>
+    <script src="https://unpkg.com/vue/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/vee-validate/2.0.0-beta.18/vee-validate.min.js"></script>
+    <script src="/web/main.js"></script>
+</body>
+
+</html>
