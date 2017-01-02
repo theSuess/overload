@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <title>Overload</title>
     <link href="https://necolas.github.io/normalize.css/5.0.0/normalize.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.5.2/animate.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.2.3/css/bulma.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css">
     <link rel="stylesheet" href="/web/overload.css">
@@ -13,6 +14,7 @@
 <body>
     <div class="container">
         <div class="box" id="app">
+            <notifications></notifications>
             <h1 class="title">Overload</h1>
             <form @submit.prevent="addDownload" class="column is-12">
                 <h4 class="title is-4">Add Directory</h4>
@@ -38,16 +40,38 @@
             </div>
         </div>
     </div>
-    <script type="text/x-template" id="worker-progress">
+    <template id="worker-progress">
         <progress class="progress" :class="[status.isFinished() ? 'is-success' : 'is-primary']" :value="status.total" :max="status.length"></progress>
-    </script>
-    <script type="text/x-template" id="worker-item">
+    </template>
+    <template type="text/x-template" id="worker-item">
         <div class="box">
             <h4 class="title is-4"> {{worker.filename}} </h4>
             <h6 class="title is-6"> {{worker.id}} </h6>
             <worker-progress :status="worker.status"></worker-progress>
         </div>
-    </script>
+    </template>
+    <template id="notifications">
+        <div class="notifications">
+            <notification v-for="notification in notifications" :notification="notification" transition="fade">
+            </notification>
+        </div>
+    </template>
+    <template id="notification">
+        <transition
+            name="custom-classes-transition"
+            enter-active-class="animated bounceInRight"
+            leave-active-class="animated bounceOutRight">
+            <div class="notification" :class="notification.type ? notification.type : 'is-primary'">
+                <button @click="triggerClose(notification)" class="delete" aria-label="Close alert" type="button">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h5 class="title is-5" v-if="notification.title">{{notification.title}}</h5>
+                <p>
+                    {{notification.text}}
+                </p>
+            </div>
+        </transition>
+    </template>
     <script src="https://unpkg.com/vue/dist/vue.js"></script>
     <script src="https://cdn.jsdelivr.net/vee-validate/2.0.0-beta.18/vee-validate.min.js"></script>
     <script src="/web/main.js"></script>

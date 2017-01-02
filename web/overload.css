@@ -1,0 +1,11 @@
+.notifications {
+    position: fixed;
+    right: 10px;
+    top: 10px;
+    width: 350px;
+    z-index: 1;
+}
+
+#app {
+    margin-bottom: 5em;
+}
