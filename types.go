@@ -14,7 +14,7 @@ type PassThru struct {
 	length int64
 	total  int64 // Total # of bytes transferred
 	stop   chan bool
-	subs   []chan Status
+	subs   map[int64]chan Status
 }
 
 type Server struct {
@@ -22,6 +22,7 @@ type Server struct {
 	workers       map[string]*Worker
 	canEnque      chan string
 	workerQueue   chan string
+	openSockets   map[int64]chan Status
 }
 
 type Task struct {

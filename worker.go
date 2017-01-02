@@ -33,7 +33,7 @@ func (pt *PassThru) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func NewWorker(rawurl, location string) (*Worker, error) {
+func NewWorker(rawurl, location string, subs map[int64]chan Status) (*Worker, error) {
 	w := Worker{Url: rawurl, Location: location}
 	w.stop = make(chan bool)
 	fileURL, err := url.Parse(w.Url)
@@ -49,7 +49,7 @@ func NewWorker(rawurl, location string) (*Worker, error) {
 	w.filepath = path.Join(w.Location, name)
 	w.Id = GetID()
 	w.Status = Status{WorkerId: w.Id}
-	w.pt = &PassThru{Worker: &w}
+	w.pt = &PassThru{Worker: &w, subs: subs}
 	return &w, nil
 }
 
@@ -78,8 +78,12 @@ func (w *Worker) IsActive() bool {
 	return w.pt.length != 0
 }
 
-func (w *Worker) AddListener(c chan Status) {
-	w.pt.subs = append(w.pt.subs, c)
+func (w *Worker) AddListener(id int64, c chan Status) {
+	w.pt.subs[id] = c
+}
+
+func (w *Worker) RemoveListener(id int64) {
+	delete(w.pt.subs, id)
 }
 
 func (w *Worker) Stop() {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -22,6 +23,7 @@ func (s *Server) Run() {
 	e.Use(middleware.Recover())
 
 	s.workers = make(map[string]*Worker)
+	s.openSockets = make(map[int64]chan Status)
 
 	g := e.Group("/api")
 	g.POST("/tasks", s.AddTask)
@@ -89,7 +91,7 @@ func (s *Server) AddTask(c echo.Context) error {
 	}
 	go func() {
 		for _, url := range urls {
-			w, err := NewWorker(url, t.Location)
+			w, err := NewWorker(url, t.Location, s.openSockets)
 			if err != nil {
 				c.Logger().Errorf("Failed to create worker! %s", err.Error())
 				continue
@@ -129,11 +131,18 @@ func (s *Server) GetActive(c echo.Context) error {
 
 func (s *Server) StreamStatus(c echo.Context) error {
 	stat := make(chan Status)
+	sid := time.Now().UnixNano()
 	for _, w := range s.workers {
-		w.AddListener(stat)
+		w.AddListener(sid, stat)
 	}
+	s.openSockets[sid] = stat
 	websocket.Handler(func(ws *websocket.Conn) {
 		defer ws.Close()
+		defer func() {
+			for _, w := range s.workers {
+				w.RemoveListener(sid)
+			}
+		}()
 		for {
 			status := <-stat
 			b, err := json.Marshal(status)
