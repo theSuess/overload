@@ -8,19 +8,10 @@ import (
 	"os"
 	"path"
 	"strings"
-)
+	"time"
 
-// PassThru wraps an existing io.Reader.
-//
-// It simply forwards the Read() call, while displaying
-// the results from individual calls to it.
-type PassThru struct {
-	io.Reader
-	length int64
-	total  int64 // Total # of bytes transferred
-	stop   chan bool
-	subs   map[int64]chan Status
-}
+	"github.com/speps/go-hashids"
+)
 
 // Read 'overrides' the underlying io.Reader's Read method.
 // This is the one that will be called by io.Copy(). We simply
@@ -34,24 +25,12 @@ func (pt *PassThru) Read(p []byte) (int, error) {
 	}
 	n, err := pt.Reader.Read(p)
 	pt.total += int64(n)
+	s := Status{WorkerId: pt.Worker.Id, Total: pt.total, Length: pt.length}
 	for _, c := range pt.subs {
-		c <- Status{Total: pt.total, Length: pt.length}
+		c <- Status{WorkerId: pt.Worker.Id, Total: pt.total, Length: pt.length}
 	}
+	pt.Worker.Status = s
 	return n, err
-}
-
-type Status struct {
-	Length int64
-	Total  int64
-}
-
-type Worker struct {
-	Url      string
-	Location string
-	stop     chan bool
-	pt       *PassThru
-	Filename string
-	filepath string
 }
 
 func NewWorker(rawurl, location string) (*Worker, error) {
@@ -68,6 +47,9 @@ func NewWorker(rawurl, location string) (*Worker, error) {
 	name := segments[len(segments)-1]
 	w.Filename = name
 	w.filepath = path.Join(w.Location, name)
+	w.Id = GetID()
+	w.Status = Status{WorkerId: w.Id}
+	w.pt = &PassThru{Worker: &w}
 	return &w, nil
 }
 
@@ -84,34 +66,33 @@ func (w *Worker) Download(done chan string) error {
 		return err
 	}
 	defer response.Body.Close()
-	w.pt = &PassThru{Reader: response.Body, length: response.ContentLength, stop: w.stop, subs: make(map[int64]chan Status)}
+	w.pt.Reader = response.Body
+	w.pt.length = response.ContentLength
+	w.pt.stop = w.stop
 	io.Copy(file, w.pt)
 	done <- w.Filename
 	return nil
 }
 
-func (w *Worker) Status() Status {
-	if w.pt != nil {
-		return Status{Length: w.pt.length, Total: w.pt.total}
-	} else {
-		return Status{Length: 0, Total: 0}
-	}
-}
-
 func (w *Worker) IsActive() bool {
-	return w.pt != nil
+	return w.pt.length != 0
 }
 
-func (w *Worker) AddListener(lid int64) chan Status {
-	c := make(chan Status, 1024)
-	w.pt.subs[lid] = c
-	return c
-}
-
-func (w *Worker) RemoveListener(lid int64) {
-	delete(w.pt.subs, lid)
+func (w *Worker) AddListener(c chan Status) {
+	w.pt.subs = append(w.pt.subs, c)
 }
 
 func (w *Worker) Stop() {
 	w.stop <- true
+}
+
+func GetID() string {
+	hd := hashids.NewData()
+	hd.Salt = "overload"
+	hd.MinLength = 10
+	h := hashids.NewWithData(hd)
+	d := []int64{0}
+	d[0] = time.Now().UnixNano()
+	e, _ := h.EncodeInt64(d)
+	return e
 }

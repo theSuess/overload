@@ -12,13 +12,6 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-type Configuration struct {
-	Interface           string
-	DownloadDir         string
-	ConcurrentDownloads int
-	MaxWorkers          int
-}
-
 func main() {
 	confLocation := "overload.toml"
 	if len(os.Args) > 1 {
@@ -26,12 +19,7 @@ func main() {
 	}
 	var c Configuration
 	toml.DecodeFile(confLocation, &c)
-	s := Server{
-		Interface:           c.Interface,
-		DownloadDir:         c.DownloadDir,
-		ConcurrentDownloads: c.ConcurrentDownloads,
-		MaxWorkers:          c.MaxWorkers,
-	}
+	s := Server{Configuration: c}
 	s.Run()
 }
 

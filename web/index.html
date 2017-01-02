@@ -34,18 +34,18 @@
                 </p>
             </form>
             <div>
-                <worker-item v-for="worker in workers" :worker="worker"></worker-item>
+                <worker-item v-for="worker in workers" :worker="worker" :ref="'worker-'+worker.id"></worker-item>
             </div>
         </div>
     </div>
     <script type="text/x-template" id="worker-progress">
-        <progress class="progress" :class="[status.Total == status.Length ? 'is-success' : 'is-primary']" :value="status.Total" :max="status.Length"></progress>
+        <progress class="progress" :class="[status.isFinished() ? 'is-success' : 'is-primary']" :value="status.total" :max="status.length"></progress>
     </script>
     <script type="text/x-template" id="worker-item">
         <div class="box">
-            <h4 class="title is-4"> {{worker.Filename}} </h4>
-            <h6 class="title is-6"> {{worker.Id}} </h6>
-            <worker-progress :status="worker.Status"></worker-progress>
+            <h4 class="title is-4"> {{worker.filename}} </h4>
+            <h6 class="title is-6"> {{worker.id}} </h6>
+            <worker-progress :status="worker.status"></worker-progress>
         </div>
     </script>
     <script src="https://unpkg.com/vue/dist/vue.js"></script>

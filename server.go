@@ -5,30 +5,12 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"time"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
-	"github.com/speps/go-hashids"
 	"golang.org/x/net/websocket"
 )
-
-type Server struct {
-	DownloadDir         string
-	Interface           string
-	workers             map[string]*Worker
-	ConcurrentDownloads int
-	canEnque            chan string
-	workerQueue         chan string
-	MaxWorkers          int
-}
-
-type Task struct {
-	Url      string `json:"url"`
-	Accept   string `json:"accept,omitempty"`
-	Location string `json:"location,omitempty"`
-}
 
 func (s *Server) Run() {
 	// Echo instance
@@ -46,18 +28,18 @@ func (s *Server) Run() {
 	g.GET("/workers", s.GetWorkers)
 	g.DELETE("/workers/:id", s.StopWorker)
 	g.GET("/workers/:id/active", s.GetActive)
-	g.GET("/workers/:id/ws", s.StreamStatus)
+	g.GET("/status", s.StreamStatus)
 
 	e.Static("/web", "web")
 	e.GET("/", func(c echo.Context) error {
 		return c.Redirect(http.StatusTemporaryRedirect, "/web")
 	})
 
-	s.canEnque = make(chan string, s.ConcurrentDownloads)
-	for i := 0; i < s.ConcurrentDownloads-1; i++ { // Initialize the channel with empty finished downloads
+	s.canEnque = make(chan string, s.Configuration.ConcurrentDownloads)
+	for i := 0; i < s.Configuration.ConcurrentDownloads-1; i++ { // Initialize the channel with empty finished downloads
 		s.canEnque <- ""
 	}
-	s.workerQueue = make(chan string, s.MaxWorkers)
+	s.workerQueue = make(chan string, s.Configuration.MaxWorkers)
 	go func() {
 		for {
 			id := <-s.workerQueue
@@ -70,7 +52,7 @@ func (s *Server) Run() {
 		}
 	}()
 	// Start server
-	e.Logger.Fatal(e.Start(s.Interface))
+	e.Logger.Fatal(e.Start(s.Configuration.Interface))
 }
 
 func (s *Server) AddTask(c echo.Context) error {
@@ -98,7 +80,7 @@ func (s *Server) AddTask(c echo.Context) error {
 	}
 
 	if t.Location == "" {
-		t.Location = s.DownloadDir
+		t.Location = s.Configuration.DownloadDir
 	}
 
 	urls, err := getURLs(u, accept)
@@ -107,35 +89,24 @@ func (s *Server) AddTask(c echo.Context) error {
 	}
 	go func() {
 		for _, url := range urls {
-			id := s.GetID()
 			w, err := NewWorker(url, t.Location)
 			if err != nil {
 				c.Logger().Errorf("Failed to create worker! %s", err.Error())
 				continue
 			}
-			s.workers[id] = w
-			s.workerQueue <- id
+			s.workers[w.Id] = w
+			s.workerQueue <- w.Id
 		}
 	}()
 	return c.NoContent(http.StatusAccepted)
 }
 
 func (s *Server) GetWorkers(c echo.Context) error {
-	workers := []struct {
-		Id       string
-		Url      string
-		Filename string
-		Status   Status
-	}{}
-	for id, w := range s.workers {
-		workers = append(workers, struct {
-			Id       string
-			Url      string
-			Filename string
-			Status   Status
-		}{Id: id, Url: w.Url, Status: w.Status(), Filename: w.Filename})
+	var ws []*Worker
+	for _, w := range s.workers {
+		ws = append(ws, w)
 	}
-	return c.JSON(http.StatusOK, workers)
+	return c.JSON(http.StatusOK, ws)
 }
 
 func (s *Server) StopWorker(c echo.Context) error {
@@ -157,20 +128,14 @@ func (s *Server) GetActive(c echo.Context) error {
 }
 
 func (s *Server) StreamStatus(c echo.Context) error {
-	worker := s.workers[c.Param("id")]
-	if worker == nil {
-		return c.NoContent(http.StatusNotFound)
+	stat := make(chan Status)
+	for _, w := range s.workers {
+		w.AddListener(stat)
 	}
-	if !worker.IsActive() {
-		return c.NoContent(http.StatusNotFound)
-	}
-	lid := time.Now().UnixNano()
-	sub := worker.AddListener(lid)
 	websocket.Handler(func(ws *websocket.Conn) {
 		defer ws.Close()
-		defer worker.RemoveListener(lid)
 		for {
-			status := <-sub
+			status := <-stat
 			b, err := json.Marshal(status)
 			if err != nil {
 				c.Logger().Error(err)
@@ -183,15 +148,4 @@ func (s *Server) StreamStatus(c echo.Context) error {
 		}
 	}).ServeHTTP(c.Response(), c.Request())
 	return nil
-}
-
-func (s *Server) GetID() string {
-	hd := hashids.NewData()
-	hd.Salt = "overload"
-	hd.MinLength = 10
-	h := hashids.NewWithData(hd)
-	d := []int64{0}
-	d[0] = time.Now().UnixNano()
-	e, _ := h.EncodeInt64(d)
-	return e
 }
