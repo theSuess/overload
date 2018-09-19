@@ -94,7 +94,7 @@ func GetID() string {
 	hd := hashids.NewData()
 	hd.Salt = "overload"
 	hd.MinLength = 10
-	h := hashids.NewWithData(hd)
+	h, _ := hashids.NewWithData(hd)
 	d := []int64{0}
 	d[0] = time.Now().UnixNano()
 	e, _ := h.EncodeInt64(d)
